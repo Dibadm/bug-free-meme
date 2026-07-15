@@ -84,7 +84,8 @@ class ReminderWorker:
         async with self.db_factory() as db:
             from app.services import ReferralService
             referral_service = ReferralService(db)
-            await referral_service.send_inactive_referral_reminders()
+            # await referral_service.send_inactive_referral_reminders()
+            pass
 
 
 class GameSchedulerWorker:
