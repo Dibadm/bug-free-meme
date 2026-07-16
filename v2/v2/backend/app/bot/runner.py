@@ -2,17 +2,11 @@
 """Telegram Bot Runner for Habesha Bet V2
 
 This script runs the Telegram bot using python-telegram-bot v20+.
-
-Usage:
-    python -m app.bot.runner
-
-Environment:
-    TELEGRAM_BOT_TOKEN - Required. Bot token from @BotFather
-    TELEGRAM_WEB_APP_URL - Required. URL of the Telegram Mini App
-    TELEGRAM_SECRET_TOKEN - Optional. Secret for Telegram webhook validation
+Can be run standalone, or imported asynchronously into a FastAPI lifespan context.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -227,12 +221,8 @@ async def post_init(application: Application) -> None:
     logger.info("bot_commands_set", commands=commands)
 
 
-def main() -> None:
-    """Start the bot."""
-    if not settings.TELEGRAM_BOT_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN is not set")
-        return
-
+def build_application() -> Application:
+    """Helper to build the PTB Application instance."""
     application = (
         Application.builder()
         .token(settings.TELEGRAM_BOT_TOKEN)
@@ -253,8 +243,43 @@ def main() -> None:
     application.add_handler(CommandHandler("mygames", mygames_command))
     application.add_handler(CommandHandler("history", history_command))
     application.add_handler(CommandHandler("settings", settings_command))
+    return application
 
-    logger.info("bot_starting", token_prefix=settings.TELEGRAM_BOT_TOKEN[:10])
+
+async def start_bot() -> None:
+    """Run the Telegram bot asynchronously inside an existing asyncio event loop."""
+    if not settings.TELEGRAM_BOT_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN is not set. Background bot cannot start.")
+        return
+
+    logger.info("bot_starting_async", token_prefix=settings.TELEGRAM_BOT_TOKEN[:10])
+    application = build_application()
+
+    # Async initialization & start sequences
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    
+    logger.info("bot_started_async_polling")
+    try:
+        # Keep cooperative polling alive forever
+        while True:
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        logger.info("bot_stopping_async_polling")
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+
+
+def main() -> None:
+    """Fallback block for manual/CLI execution."""
+    if not settings.TELEGRAM_BOT_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN is not set")
+        return
+
+    application = build_application()
+    logger.info("bot_starting_blocking", token_prefix=settings.TELEGRAM_BOT_TOKEN[:10])
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
