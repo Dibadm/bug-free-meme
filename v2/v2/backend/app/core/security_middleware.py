@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.logging import get_logger
 
+
 logger = get_logger(__name__)
 
 
@@ -26,6 +27,23 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next: Any) -> Any:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        
+        # Allows Telegram to iframe your Web App (Critical for Mini Apps!)
+        response.headers["X-Frame-Options"] = "ALLOW-FROM https://web.telegram.org/"
+        
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+        # Opens CSP to let Telegram Web App talk to your Render backend secure socket & api
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "frame-ancestors 'self' https://web.telegram.org https://*.web.telegram.org; "
+            "connect-src 'self' https://bug-free-meme-1.onrender.com wss://bug-free-meme-1.onrender.com https://api.telegram.org;"
+        )
+        return response
     async def dispatch(self, request: Request, call_next: Any) -> Any:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
